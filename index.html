@@ -5824,9 +5824,162 @@ function getSystemStats() {
   };
 }
 
+// ════════════════════════════════════════════════════════════
+// SYNC WIZARD (v22) — Guided data transfer between devices
+// ════════════════════════════════════════════════════════════
+
+function openSyncWizard(mode) {
+  // mode = 'export' (sending data) or 'import' (receiving data)
+  const isExport = mode === 'export';
+  
+  const counts = {
+    items: (DB.items || []).filter(i => i.active).length,
+    maintAssets: (DB.maintenance?.assets || []).length,
+    maintSuppliers: (DB.maintenance?.suppliers || []).length,
+    maintWOs: (DB.maintenance?.workOrders || []).length,
+    movements: (DB.movements || []).length,
+  };
+  
+  const dataSize = Math.round(JSON.stringify(DB).length / 1024);
+  
+  const html = `
+    <div class="modal-overlay" id="sync-wizard-modal" style="z-index:9999">
+      <div class="modal" style="max-width:640px">
+        <div class="modal-header">
+          <div class="modal-title">${isExport ? '📤 نقل البيانات إلى جهاز آخر' : '📥 استيراد بيانات من جهاز آخر'}</div>
+          <button class="modal-close" onclick="document.getElementById('sync-wizard-modal').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${isExport ? `
+            <!-- EXPORT FLOW -->
+            <div style="background:var(--bg2);padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:13px;line-height:1.7">
+              <div style="font-weight:700;margin-bottom:.4rem;color:var(--accent)">📦 البيانات التي ستُنقَل من هذا الجهاز:</div>
+              <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:.3rem .8rem">
+                <div>📦 الأصناف: <strong>${counts.items}</strong></div>
+                <div>↑↓ الحركات: <strong>${counts.movements}</strong></div>
+                <div>◆ أصول الصيانة: <strong>${counts.maintAssets}</strong></div>
+                <div>🏢 الموردين: <strong>${counts.maintSuppliers}</strong></div>
+                <div>🐛 البلاغات: <strong>${counts.maintWOs}</strong></div>
+                <div>💾 الحجم: <strong>${dataSize} KB</strong></div>
+              </div>
+            </div>
+            
+            <div style="font-weight:700;margin-bottom:.5rem;font-size:14px">اختر طريقة النقل:</div>
+            
+            <!-- Method 1: Download + Share -->
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:.6rem">
+              <div style="font-weight:600;margin-bottom:.3rem">١. 💾 تنزيل الملف</div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:.5rem;line-height:1.5">
+                الأسهل والأضمن — نزِّل ملف JSON، ثم أرسله للجوال بأي طريقة (WhatsApp / إيميل / Google Drive)
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="exportBackup();showToast('✓ تم — أرسله الآن عبر WhatsApp أو إيميل','success',5000)">
+                💾 تنزيل ملف النسخة الآن
+              </button>
+            </div>
+            
+            <!-- Method 2: WhatsApp -->
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:.6rem">
+              <div style="font-weight:600;margin-bottom:.3rem">٢. 📱 شارك مع نفسك عبر WhatsApp</div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:.5rem;line-height:1.5">
+                ١) نزِّل الملف (الخيار ١)<br>
+                ٢) افتح WhatsApp Web أو الموبايل<br>
+                ٣) ابعت لنفسك في "ملاحظات" أو "Saved Messages"<br>
+                ٤) افتح الرسالة من جوالك، نزِّل الملف
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="window.open('https://web.whatsapp.com', '_blank')">
+                🌐 فتح WhatsApp Web
+              </button>
+            </div>
+            
+            <!-- Method 3: Google Drive -->
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:.75rem 1rem;margin-bottom:.6rem">
+              <div style="font-weight:600;margin-bottom:.3rem">٣. ☁️ Google Drive (للحفظ الدائم)</div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:.5rem;line-height:1.5">
+                ١) نزِّل الملف<br>
+                ٢) ارفعه على Google Drive<br>
+                ٣) من جوالك، افتح Drive ونزِّل الملف<br>
+                ٤) في تطبيق WMS على الجوال: استيراد
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="window.open('https://drive.google.com/drive/my-drive', '_blank')">
+                🌐 فتح Google Drive
+              </button>
+            </div>
+            
+            <div style="background:rgba(245,158,11,.1);border:1px solid #f59e0b;border-radius:6px;padding:.75rem 1rem;font-size:12px;line-height:1.6;margin-top:1rem">
+              <strong style="color:#f59e0b">⚠ مهم بعد النقل:</strong><br>
+              • قرِّر أي جهاز سيكون <strong>الأساسي</strong> — أنصح بالجوال لأنه معك دائماً<br>
+              • لا تُعدِّل على جهازين مختلفين في نفس الوقت — البيانات لا تتزامن تلقائياً<br>
+              • صدِّر نسخة من الجهاز الأساسي أسبوعياً للأمان
+            </div>
+          ` : `
+            <!-- IMPORT FLOW -->
+            <div style="background:rgba(220,38,38,.1);border:1px solid #dc2626;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;font-size:13px;line-height:1.6">
+              <strong style="color:#dc2626">⚠ تحذير مهم</strong><br>
+              الاستيراد سيستبدل البيانات الحالية بالكامل. سيتم أخذ نسخة احتياطية تلقائياً قبل الاستبدال للأمان.
+            </div>
+            
+            <div style="background:var(--bg2);padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:13px;line-height:1.7">
+              <div style="font-weight:700;margin-bottom:.4rem;color:var(--accent)">📊 البيانات الحالية على هذا الجهاز:</div>
+              <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:.3rem .8rem">
+                <div>📦 الأصناف: <strong>${counts.items}</strong></div>
+                <div>◆ أصول الصيانة: <strong>${counts.maintAssets}</strong></div>
+                <div>🏢 الموردين: <strong>${counts.maintSuppliers}</strong></div>
+                <div>🐛 البلاغات: <strong>${counts.maintWOs}</strong></div>
+              </div>
+            </div>
+            
+            <div style="font-weight:700;margin-bottom:.5rem;font-size:14px">اختر ملف النسخة الاحتياطية (.json):</div>
+            
+            <div style="background:var(--bg2);border:2px dashed var(--accent);border-radius:8px;padding:1.5rem;text-align:center;margin-bottom:.6rem">
+              <label class="btn btn-primary" style="cursor:pointer;font-size:14px;padding:.6rem 1.5rem">
+                📂 اختيار ملف JSON
+                <input type="file" accept="application/json,.json" style="display:none" onchange="restoreBackup(this.files[0]);document.getElementById('sync-wizard-modal').remove();">
+              </label>
+              <div style="font-size:11px;color:var(--text3);margin-top:.5rem;line-height:1.5">
+                ابحث عن ملف يبدأ بـ <code>wms_backup_</code> وينتهي بـ <code>.json</code>
+              </div>
+            </div>
+            
+            <div style="background:rgba(59,130,246,.08);border:1px solid #3b82f6;border-radius:6px;padding:.6rem .85rem;font-size:11px;color:var(--text2);line-height:1.6">
+              💡 <strong>نصيحة:</strong> بعد الاستيراد، ستظهر إحصاءات بما تم نقله للتأكُّد من صحة العملية.
+            </div>
+          `}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="document.getElementById('sync-wizard-modal').remove()">إغلاق</button>
+        </div>
+      </div>
+    </div>`;
+  
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+
 function exportBackup() {
   try {
-    const data = JSON.stringify(DB, null, 2);
+    // v22: Wrap DB with metadata for sync tracking
+    const exportObj = {
+      __wms_export__: {
+        version: 'v22',
+        exportedAt: new Date().toISOString(),
+        exportedFrom: navigator.userAgent.substring(0, 100),
+        exportedBy: DB.currentUser?.name || DB.currentUser?.id || 'مستخدم غير معروف',
+        counts: {
+          items: (DB.items || []).filter(i => i.active).length,
+          movements: (DB.movements || []).length,
+          warehouses: (DB.warehouses || []).length,
+          users: (DB.users || []).length,
+          employees: (DB.employees || []).length,
+          maintAssets: (DB.maintenance?.assets || []).length,
+          maintSuppliers: (DB.maintenance?.suppliers || []).length,
+          maintSchedules: (DB.maintenance?.schedules || []).length,
+          maintWOs: (DB.maintenance?.workOrders || []).length,
+        },
+      },
+      ...DB,
+    };
+    
+    const data = JSON.stringify(exportObj, null, 2);
     const blob = new Blob([data], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -5847,16 +6000,64 @@ function restoreBackup(file) {
   reader.onload = (e) => {
     try {
       const data = JSON.parse(e.target.result);
-      if(!data.items || !Array.isArray(data.items)) {
+      
+      // v22: Check for metadata wrapper
+      let meta = null;
+      let dbData = data;
+      if (data.__wms_export__) {
+        meta = data.__wms_export__;
+        dbData = { ...data };
+        delete dbData.__wms_export__;
+      }
+      
+      if(!dbData.items || !Array.isArray(dbData.items)) {
         showToast('الملف لا يحتوي بيانات WMS صحيحة', 'danger');
         return;
       }
-      if(!confirm(`استعادة النسخة الاحتياطية؟\n\n${(data.items||[]).length} صنف، ${(data.movements||[]).length} حركة\n\nسيتم استبدال البيانات الحالية بالكامل.`)) return;
+      
+      // Build detailed confirmation message
+      const currentCounts = {
+        items: (DB.items || []).filter(i => i.active).length,
+        maintAssets: (DB.maintenance?.assets || []).length,
+        maintSuppliers: (DB.maintenance?.suppliers || []).length,
+        maintWOs: (DB.maintenance?.workOrders || []).length,
+      };
+      const newCounts = {
+        items: (dbData.items || []).filter(i => i.active).length,
+        maintAssets: (dbData.maintenance?.assets || []).length,
+        maintSuppliers: (dbData.maintenance?.suppliers || []).length,
+        maintWOs: (dbData.maintenance?.workOrders || []).length,
+      };
+      
+      const msg = `استعادة النسخة الاحتياطية؟
+
+${meta ? `📅 صُدِّرت: ${new Date(meta.exportedAt).toLocaleString('ar')}
+👤 من: ${meta.exportedBy || '—'}
+` : ''}
+📊 البيانات الجديدة:
+   • ${newCounts.items} صنف
+   • ${newCounts.maintAssets} أصل صيانة
+   • ${newCounts.maintSuppliers} مورد
+   • ${newCounts.maintWOs} بلاغ
+   • ${(dbData.movements || []).length} حركة
+
+⚠ سيتم استبدال البيانات الحالية:
+   • ${currentCounts.items} صنف
+   • ${currentCounts.maintAssets} أصل صيانة
+   • ${currentCounts.maintSuppliers} مورد
+
+هل تريد المتابعة؟`;
+      
+      if(!confirm(msg)) return;
+      
+      // Safety: take a snapshot before replacing
+      try { autoBackupSnapshot('pre-import'); } catch(e) {}
+      
       Object.keys(DB).forEach(k => delete DB[k]);
-      Object.assign(DB, data);
+      Object.assign(DB, dbData);
       autoSave();
-      showToast('✓ تم الاستعادة بنجاح', 'success');
-      setTimeout(() => location.reload(), 1000);
+      showToast(`✓ تم استعادة ${newCounts.items} صنف + ${newCounts.maintAssets} أصل + ${newCounts.maintSuppliers} مورد`, 'success');
+      setTimeout(() => location.reload(), 1500);
     } catch(err) {
       showToast('ملف غير صالح: ' + err.message, 'danger');
     }
@@ -5887,12 +6088,20 @@ function renderMigrationSection() {
         💡 <strong>نصيحة:</strong> صدِّر نسخة احتياطية بانتظام لحماية بياناتك. حد التخزين المحلي تقريباً 5 ميجابايت.
       </div>
       <div class="flex gap-sm" style="flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" onclick="exportBackup()">💾 تصدير نسخة احتياطية (JSON)</button>
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0">
-          📂 استعادة من نسخة
-          <input type="file" accept="application/json" style="display:none" onchange="restoreBackup(this.files[0]);this.value='';">
-        </label>
-        <button class="btn btn-ghost btn-sm" onclick="if(confirm('مسح جميع البيانات المحفوظة محلياً؟ ستعود الصفحة لحالتها الأصلية بعد إعادة التحميل.')){clearLocal();setTimeout(()=>location.reload(),500);}">🗑 مسح التخزين المحلي</button>
+        <button class="btn btn-primary btn-sm" onclick="openSyncWizard('export')" style="background:#10b981">📤 نقل البيانات لجهاز آخر</button>
+        <button class="btn btn-primary btn-sm" onclick="openSyncWizard('import')" style="background:#3b82f6">📥 استيراد من جهاز آخر</button>
+      </div>
+      
+      <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:.5rem">أو استخدم العمليات المتقدِّمة:</div>
+        <div class="flex gap-sm" style="flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="exportBackup()">💾 تنزيل JSON مباشرة</button>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0">
+            📂 استعادة من ملف
+            <input type="file" accept="application/json" style="display:none" onchange="restoreBackup(this.files[0]);this.value='';">
+          </label>
+          <button class="btn btn-ghost btn-sm" onclick="if(confirm('مسح جميع البيانات المحفوظة محلياً؟ ستعود الصفحة لحالتها الأصلية بعد إعادة التحميل.')){clearLocal();setTimeout(()=>location.reload(),500);}">🗑 مسح التخزين المحلي</button>
+        </div>
       </div>
       
       <!-- v19: Auto-backup section -->
